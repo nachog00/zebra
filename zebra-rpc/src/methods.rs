@@ -2602,37 +2602,7 @@ where
         raw_address: String,
     ) -> Result<z_validate_address::Response> {
         let network = self.network.clone();
-
-        let Ok(address) = raw_address.parse::<zcash_address::ZcashAddress>() else {
-            return Ok(z_validate_address::Response::invalid());
-        };
-
-        let address = match address.convert::<primitives::Address>() {
-            Ok(address) => address,
-            Err(err) => {
-                tracing::debug!(?err, "conversion error");
-                return Ok(z_validate_address::Response::invalid());
-            }
-        };
-
-        if address.network() == network.kind() {
-            Ok(z_validate_address::Response {
-                is_valid: true,
-                address: Some(raw_address),
-                address_type: Some(z_validate_address::AddressType::from(&address)),
-                is_mine: Some(false),
-            })
-        } else {
-            tracing::info!(
-                ?network,
-                address_network = ?address.network(),
-                "invalid address network in z_validateaddress RPC: address is for {:?} but Zebra is on {:?}",
-                address.network(),
-                network
-            );
-
-            Ok(z_validate_address::Response::invalid())
-        }
+        z_validate_address(raw_address, network)
     }
 
     async fn get_block_subsidy(&self, height: Option<u32>) -> Result<BlockSubsidy> {
@@ -2859,6 +2829,83 @@ where
                 None::<()>,
             ));
         }
+    }
+}
+
+/// Validates a Zcash address against the current network context and returns structured metadata.
+///
+/// This function is used to validate whether a given raw address string is a syntactically correct
+/// and semantically valid Zcash address for the specified network (`Mainnet`, `Testnet`, etc.).
+/// It returns a response indicating if the address is valid, its type (e.g. Sapling, Transparent),
+/// and whether it belongs to this node (currently always `false`).
+///
+/// The validation steps are:
+/// 1. Parse the raw string as a [`ZcashAddress`].
+/// 2. Attempt conversion to a `primitives::Address`.
+/// 3. Check if the address matches the expected network.
+/// 4. Return a structured [`z_validate_address::Response`] accordingly.
+///
+/// # Parameters
+///
+/// - `raw_address`: A `String` representing the address to be validated (Base58 or Bech32 format).
+/// - `network`: The current [`Network`] configuration of the node (e.g., Mainnet or Testnet).
+///
+/// # Returns
+///
+/// Returns a [`Result`] with a [`z_validate_address::Response`] indicating:
+/// - `is_valid`: Whether the address is valid.
+/// - `address_type`: The parsed address type, if valid.
+/// - `is_mine`: Always `false` (future implementation may check local wallet).
+///
+/// # Errors
+///
+/// This function does **not** return a Rust error (`Err(_)`) under normal circumstances,
+/// but logs debug/info messages when parsing or network mismatches occur.
+///
+/// It will return an `Ok(Response::invalid())` if:
+/// - The address cannot be parsed as a valid [`ZcashAddress`].
+/// - The address cannot be converted to the internal address type.
+/// - The address is for a different network than the one the node is running on.
+///
+/// # Example
+///
+/// ```rust
+/// let response = z_validate_address("t1XYZ...".to_string(), Network::Mainnet)?;
+/// assert!(response.is_valid);
+/// ```
+pub fn z_validate_address(
+    raw_address: String,
+    network: Network,
+) -> Result<z_validate_address::Response> {
+    let Ok(address) = raw_address.parse::<zcash_address::ZcashAddress>() else {
+        return Ok(z_validate_address::Response::invalid());
+    };
+
+    let address = match address.convert::<primitives::Address>() {
+        Ok(address) => address,
+        Err(err) => {
+            tracing::debug!(?err, "conversion error");
+            return Ok(z_validate_address::Response::invalid());
+        }
+    };
+
+    if address.network() == network.kind() {
+        Ok(z_validate_address::Response {
+            is_valid: true,
+            address: Some(raw_address),
+            address_type: Some(z_validate_address::AddressType::from(&address)),
+            is_mine: Some(false),
+        })
+    } else {
+        tracing::info!(
+            ?network,
+            address_network = ?address.network(),
+            "invalid address network in z_validateaddress RPC: address is for {:?} but Zebra is on {:?}",
+            address.network(),
+            network
+        );
+
+        Ok(z_validate_address::Response::invalid())
     }
 }
 
