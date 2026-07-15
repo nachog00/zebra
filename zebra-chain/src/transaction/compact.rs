@@ -20,7 +20,7 @@ use crate::{
 };
 
 /// A compact representation of a transaction for indexing purposes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompactTransaction {
     /// Transparent inputs — only the outpoint (prev_hash + prev_index).
     pub transparent_inputs: Vec<transparent::OutPoint>,
@@ -35,7 +35,7 @@ pub struct CompactTransaction {
 }
 
 /// Compact transparent output: value + script.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompactOutput {
     /// Value in zatoshis.
     pub value: u64,
@@ -44,7 +44,7 @@ pub struct CompactOutput {
 }
 
 /// Compact Sapling output.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompactSaplingOutput {
     /// Note commitment (cmu).
     pub cmu: [u8; 32],
@@ -55,7 +55,7 @@ pub struct CompactSaplingOutput {
 }
 
 /// Compact Orchard action.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompactOrchardAction {
     /// Nullifier.
     pub nullifier: [u8; 32],
@@ -68,7 +68,7 @@ pub struct CompactOrchardAction {
 }
 
 /// A compact block: header + compact transactions.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompactBlock {
     /// Block header.
     pub header: block::Header,

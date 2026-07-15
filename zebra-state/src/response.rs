@@ -616,6 +616,10 @@ impl TryFrom<ReadResponse> for Response {
 
             ReadResponse::ValidBlockProposal => Ok(Response::ValidBlockProposal),
 
+            ReadResponse::CompactBlock(_) => {
+                Err("there is no corresponding Response for this ReadResponse")
+            }
+
             ReadResponse::SolutionRate(_) | ReadResponse::TipBlockSize(_) => {
                 Err("there is no corresponding Response for this ReadResponse")
             }
