@@ -22,6 +22,8 @@ use crate::{
 /// A compact representation of a transaction for indexing purposes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompactTransaction {
+    /// Transaction hash (txid), computed from the raw serialized bytes.
+    pub txid: crate::transaction::Hash,
     /// Transparent inputs — only the outpoint (prev_hash + prev_index).
     pub transparent_inputs: Vec<transparent::OutPoint>,
     /// Transparent outputs — value + lock_script.
@@ -304,6 +306,7 @@ fn parse_compact_v4<R: Read>(reader: &mut R) -> Result<CompactTransaction, Seria
     }
 
     Ok(CompactTransaction {
+        txid: crate::transaction::Hash([0; 32]), // set by caller
         transparent_inputs,
         transparent_outputs,
         sapling_nullifiers,
@@ -354,6 +357,7 @@ fn parse_compact_v5<R: Read>(reader: &mut R) -> Result<CompactTransaction, Seria
     }
 
     Ok(CompactTransaction {
+        txid: crate::transaction::Hash([0; 32]), // set by caller
         transparent_inputs,
         transparent_outputs,
         sapling_nullifiers,
@@ -369,7 +373,14 @@ fn parse_compact_v5<R: Read>(reader: &mut R) -> Result<CompactTransaction, Seria
 /// Deserialize a transaction from raw bytes in compact form.
 ///
 /// Supports V1–V5. Skips proofs, signatures, and input unlock scripts.
+/// The `txid` is computed from the raw bytes (double-SHA256) and included
+/// in the result.
 pub fn compact_deserialize(bytes: &[u8]) -> Result<CompactTransaction, SerializationError> {
+    // Txid = double-SHA256 of the raw serialized transaction.
+    use sha2::{Digest, Sha256};
+    let hash1 = Sha256::digest(bytes);
+    let hash2 = Sha256::digest(hash1);
+    let txid = crate::transaction::Hash(<[u8; 32]>::try_from(hash2.as_slice()).expect("sha256 is 32 bytes"));
     let mut reader = io::Cursor::new(bytes);
 
     const LOW_31_BITS: u32 = (1 << 31) - 1;
@@ -385,6 +396,7 @@ pub fn compact_deserialize(bytes: &[u8]) -> Result<CompactTransaction, Serializa
             let transparent_inputs = parse_compact_inputs(&mut reader)?;
             let transparent_outputs = parse_compact_outputs(&mut reader)?;
             Ok(CompactTransaction {
+                txid,
                 transparent_inputs,
                 transparent_outputs,
                 sapling_nullifiers: Vec::new(),
@@ -392,8 +404,16 @@ pub fn compact_deserialize(bytes: &[u8]) -> Result<CompactTransaction, Serializa
                 orchard_actions: Vec::new(),
             })
         }
-        (4, true) => parse_compact_v4(&mut reader),
-        (5, true) => parse_compact_v5(&mut reader),
+        (4, true) => {
+            let mut tx = parse_compact_v4(&mut reader)?;
+            tx.txid = txid;
+            Ok(tx)
+        }
+        (5, true) => {
+            let mut tx = parse_compact_v5(&mut reader)?;
+            tx.txid = txid;
+            Ok(tx)
+        }
         _ => Err(SerializationError::Parse("unsupported transaction version for compact deserialize")),
     }
 }

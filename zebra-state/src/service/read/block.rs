@@ -489,6 +489,7 @@ fn compact_tx_from_full(
         .collect();
 
     CompactTransaction {
+        txid: tx.hash(),
         transparent_inputs,
         transparent_outputs,
         sapling_nullifiers,
