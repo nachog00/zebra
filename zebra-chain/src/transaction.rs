@@ -4,6 +4,7 @@ use std::{collections::HashMap, fmt, iter, sync::Arc};
 
 use halo2::pasta::pallas;
 
+pub mod compact;
 mod auth_digest;
 mod hash;
 mod joinsplit;
