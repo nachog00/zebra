@@ -362,3 +362,129 @@ where
         .and_then(|chain| chain.as_ref().block_info(hash_or_height))
         .or_else(|| db.block_info(hash_or_height))
 }
+
+/// Returns a compact block representation suitable for indexers.
+///
+/// For finalized blocks, reads raw transaction bytes from RocksDB and
+/// uses the compact deserializer to skip proofs and signatures.
+/// For non-finalized blocks, falls back to the full block and converts.
+pub fn compact_block<C>(
+    chain: Option<C>,
+    db: &ZebraDb,
+    hash_or_height: HashOrHeight,
+) -> Option<zebra_chain::transaction::compact::CompactBlock>
+where
+    C: AsRef<Chain>,
+{
+    use zebra_chain::transaction::compact;
+
+    // Try non-finalized chain first (blocks are already in memory).
+    if let Some(block) = chain
+        .as_ref()
+        .and_then(|chain| chain.as_ref().block(hash_or_height))
+    {
+        // Convert from full block — non-finalized blocks are already deserialized.
+        let header = (*block.block.header).clone();
+        let hash = block.hash;
+        let height = block.block.coinbase_height().unwrap_or(Height(0));
+        let transactions = block
+            .block
+            .transactions
+            .iter()
+            .map(|tx| compact_tx_from_full(tx))
+            .collect();
+
+        return Some(compact::CompactBlock {
+            header,
+            hash,
+            height,
+            transactions,
+        });
+    }
+
+    // Finalized: use raw bytes + compact deserialize.
+    let height = hash_or_height.height_or_else(|hash| db.height(hash))?;
+    let header = db.block_header(height.into())?;
+    let hash = db.hash(height)?;
+
+    let transactions: Vec<compact::CompactTransaction> = db
+        .raw_transactions_by_height(height)
+        .map(|(_loc, raw)| {
+            compact::compact_deserialize(raw.raw_bytes())
+                .expect("raw transaction bytes should be valid")
+        })
+        .collect();
+
+    Some(compact::CompactBlock {
+        header: (*header).clone(),
+        hash,
+        height,
+        transactions,
+    })
+}
+
+/// Convert a fully-deserialized transaction to compact form.
+fn compact_tx_from_full(
+    tx: &Transaction,
+) -> zebra_chain::transaction::compact::CompactTransaction {
+    use zebra_chain::transaction::compact::*;
+
+    let transparent_inputs = tx
+        .inputs()
+        .iter()
+        .filter_map(|input| match input {
+            transparent::Input::PrevOut { outpoint, .. } => Some(*outpoint),
+            transparent::Input::Coinbase { .. } => None,
+        })
+        .collect();
+
+    let transparent_outputs = tx
+        .outputs()
+        .iter()
+        .map(|out| CompactOutput {
+            value: u64::from(out.value),
+            script: out.lock_script.as_raw_bytes().to_vec(),
+        })
+        .collect();
+
+    let sapling_nullifiers = tx
+        .sapling_nullifiers()
+        .map(|nf| <[u8; 32]>::from(*nf))
+        .collect();
+
+    let sapling_outputs = tx
+        .sapling_outputs()
+        .map(|out| {
+            let epk_bytes: [u8; 32] = (&out.ephemeral_key).into();
+            let enc_bytes: [u8; 580] = out.enc_ciphertext.into();
+            CompactSaplingOutput {
+                cmu: out.cm_u.to_bytes(),
+                ephemeral_key: epk_bytes,
+                enc_ciphertext_head: enc_bytes[..52].try_into().expect("52 bytes"),
+            }
+        })
+        .collect();
+
+    let orchard_actions = tx
+        .orchard_actions()
+        .map(|act| {
+            let nf_bytes: [u8; 32] = act.nullifier.into();
+            let epk_bytes: [u8; 32] = (&act.ephemeral_key).into();
+            let enc_bytes: [u8; 580] = act.enc_ciphertext.into();
+            CompactOrchardAction {
+                nullifier: nf_bytes,
+                cmx: <[u8; 32]>::from(act.cm_x),
+                ephemeral_key: epk_bytes,
+                enc_ciphertext_head: enc_bytes[..52].try_into().expect("52 bytes"),
+            }
+        })
+        .collect();
+
+    CompactTransaction {
+        transparent_inputs,
+        transparent_outputs,
+        sapling_nullifiers,
+        sapling_outputs,
+        orchard_actions,
+    }
+}
