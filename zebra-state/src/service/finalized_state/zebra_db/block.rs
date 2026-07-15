@@ -324,7 +324,7 @@ impl ZebraDb {
     /// Returns an iterator of all raw [`Transaction`]s for a provided block
     /// height in finalized state.
     #[allow(clippy::unwrap_in_result)]
-    fn raw_transactions_by_height(
+    pub(crate) fn raw_transactions_by_height(
         &self,
         height: Height,
     ) -> impl Iterator<Item = (TransactionLocation, RawBytes)> + '_ {
