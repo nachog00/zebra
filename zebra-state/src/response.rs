@@ -407,6 +407,11 @@ pub enum ReadResponse {
         next_block_hash: Option<block::Hash>,
     },
 
+    /// Response to [`ReadRequest::CompactBlock`] with a compact block
+    /// suitable for indexers. Contains only outpoints, values, nullifiers,
+    /// note commitments, and ephemeral keys — no proofs or signatures.
+    CompactBlock(Option<zebra_chain::transaction::compact::CompactBlock>),
+
     /// Response to [`ReadRequest::Transaction`] with the specified transaction.
     Transaction(Option<MinedTx>),
 

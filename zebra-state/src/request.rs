@@ -1154,6 +1154,17 @@ pub enum ReadRequest {
     /// [`block::Height`] using `.into()`.
     BlockHeader(HashOrHeight),
 
+    /// Looks up a block by hash or height and returns a compact representation
+    /// suitable for indexers. Skips proofs, signatures, and input unlock
+    /// scripts — only outpoints, values, nullifiers, note commitments, and
+    /// ephemeral keys are deserialized.
+    ///
+    /// Returns
+    ///
+    /// * [`ReadResponse::CompactBlock(Some(compact))`](ReadResponse::CompactBlock) if the block is in the best chain;
+    /// * [`ReadResponse::CompactBlock(None)`](ReadResponse::CompactBlock) otherwise.
+    CompactBlock(HashOrHeight),
+
     /// Looks up a transaction by hash in the current best chain.
     ///
     /// Returns
@@ -1482,6 +1493,7 @@ impl ReadRequest {
             ReadRequest::AnyChainBlock(_) => "any_chain_block",
             ReadRequest::BlockAndSize(_) => "block_and_size",
             ReadRequest::BlockHeader(_) => "block_header",
+            ReadRequest::CompactBlock(_) => "compact_block",
             ReadRequest::Transaction(_) => "transaction",
             ReadRequest::AnyChainTransaction(_) => "any_chain_transaction",
             ReadRequest::TransactionIdsForBlock(_) => "transaction_ids_for_block",
